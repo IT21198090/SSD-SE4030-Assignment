@@ -18,7 +18,7 @@ session_start();
 // Simple CSRF helpers (no extra files needed)
 function ensure_csrf_token() {
     if (empty($_SESSION['csrf'])) {
-        $_SESSION['csrf'] = bin2hex(random_bytes(32));
+        $_SESSION['csrf'] = bin2hex(random_bytes(32)); // FIX: strong random CSRF token
     }
 }
 function check_csrf_token($token) {
@@ -65,6 +65,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="utf-8">
   <title>Login - Hospital Appointment System</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    /* minimal inline styles for readability */
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .error { background: #f2dede; color: #a94442; padding: 8px; border-radius: 6px; margin-bottom:10px; }
+    form div { margin-bottom: 8px; }
+    label { display:block; margin-bottom:4px; }
+  </style>
 </head>
 <body>
   <h1>Login</h1>
@@ -78,18 +85,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($_SESSION['csrf'], ENT_QUOTES, 'UTF-8'); ?>">
 
     <div>
-      <label>Username</label>
-      <input type="text" name="name" required>
+      <label for="name">Username</label>
+      <input id="name" type="text" name="name" required>
     </div>
     <div>
-      <label>Password</label>
-      <input type="password" name="password" required>
+      <label for="password">Password</label>
+      <input id="password" type="password" name="password" required>
     </div>
     <button type="submit">Login</button>
   </form>
 
+  <!-- FIX: OAuth entry point (Authorization Code + PKCE flow implemented in oauth_login.php) -->
+  <!-- Added per request: OAuth sign-in option -->
+  <p>or</p>
+  <p><a href="oauth_login.php">Continue with Google</a> <!-- FIX: OAuth entry point --></p>
+
   <p>Tip: Create a user with a hashed password using a small one-time script:
-  <code>
+  <code style="display:block; background:#f7f7f7; padding:8px; border-radius:4px; margin-top:6px;">
   &lt;?php require 'dbcon.php';
   $u='admin'; $p=password_hash('StrongP@ssw0rd', PASSWORD_BCRYPT);
   $pdo-&gt;prepare('INSERT INTO users(name,password_hash) VALUES(?,?)')-&gt;execute([$u,$p]); ?&gt;

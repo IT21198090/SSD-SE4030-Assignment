@@ -37,6 +37,12 @@ CREATE TABLE users (
 
 INSERT INTO users (id, name, password) VALUES
 (1, 'Eren', '123');
+
+USE hospital;
+ALTER TABLE users
+  ADD COLUMN provider VARCHAR(50) NULL,              -- e.g., 'google'
+  ADD COLUMN provider_sub VARCHAR(255) NULL;         -- stable Google user id (sub)
+CREATE UNIQUE INDEX ux_users_provider_sub ON users (provider, provider_sub);
 ```
 
 ### Step 2: Manual Setup (Alternative)
