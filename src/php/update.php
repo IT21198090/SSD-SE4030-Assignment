@@ -1,152 +1,116 @@
 <?php
-include "dbcon.php";
+// update.php
+require __DIR__ . '/dbcon.php';
 
-$id = $_GET["updateid"];
-$sql = "Select * from `appointment`where id=$id";
-$result = mysqli_query($dbcon, $sql);
-$row = mysqli_fetch_assoc($result);
+// ---- Session hardening ----
+$https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/',
+    'domain'   => '',
+    'secure'   => $https,
+    'httponly' => true,
+    'samesite' => 'Lax'
+]);
+session_start();
 
-$name = $row['name'];
-$surname = $row['surname'];
-$id_number = $row['id_number'];
-$city = $row['city'];
-$department = $row['department'];
-$date = $row['date'];
+if (empty($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
 
-if (isset($_POST['submit'])) {
-    $name = $_POST['name'];
-    $surname = $_POST['surname'];
-    $id_number = $_POST['id_number'];
-    $city = $_POST['city'];
-    $department = $_POST['department'];
-    $date = $_POST['date'];
-    mysqli_query($dbcon, "update `appointment` set id=$id,name='$name',surname='$surname',id_number='$id_number',city='$city',department='$department' where id='$id'");
-    header('location:home.php');
+// CSRF helpers
+function ensure_csrf_token() {
+    if (empty($_SESSION['csrf'])) {
+        $_SESSION['csrf'] = bin2hex(random_bytes(32));
+    }
+}
+function check_csrf_token($token) {
+    return isset($_SESSION['csrf']) && hash_equals($_SESSION['csrf'], $token ?? '');
+}
+ensure_csrf_token();
+
+$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
+// Fetch record
+$stmt = $pdo->prepare('SELECT * FROM appointment WHERE id = ? LIMIT 1'); // FIX: prepared
+$stmt->execute([$id]);
+$record = $stmt->fetch();
+
+if (!$record) {
+    http_response_code(404);
+    exit('Appointment not found.');
+}
+
+$update_error = '';
+$update_success = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // FIX: CSRF check
+    if (!check_csrf_token($_POST['csrf'] ?? '')) {
+        $update_error = 'Invalid request.';
+    } else {
+        $name = trim($_POST['name'] ?? '');
+        $surname = trim($_POST['surname'] ?? '');
+        $id_number = trim($_POST['id_number'] ?? '');
+        $city = trim($_POST['city'] ?? '');
+        $department = trim($_POST['department'] ?? '');
+        $date = trim($_POST['date'] ?? '');
+
+        if ($name === '' || $surname === '' || $id_number === '' || $city === '' || $department === '' || $date === '') {
+            $update_error = 'All fields are required.';
+        } else {
+            $d = DateTime::createFromFormat('Y-m-d', $date);
+            if (!$d || $d->format('Y-m-d') !== $date) {
+                $update_error = 'Invalid date (use YYYY-MM-DD).';
+            } else {
+                // FIX: prepared UPDATE
+                $stmtU = $pdo->prepare('
+                  UPDATE appointment
+                  SET name = ?, surname = ?, id_number = ?, city = ?, department = ?, date = ?
+                  WHERE id = ?
+                ');
+                $stmtU->execute([$name, $surname, $id_number, $city, $department, $date, $id]);
+                $update_success = 'Appointment updated.';
+                // Refresh $record to show updated values
+                $stmt->execute([$id]);
+                $record = $stmt->fetch();
+            }
+        }
+    }
 }
 ?>
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-    <!--Meta-->
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Update Appointment</title>
-    <link rel="icon" type="image/x-icon" href="./src/img/favicon.ico" />
-
-    <!--CSS-->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="../css/style.css" />
+  <meta charset="utf-8">
+  <title>Update Appointment</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
+<body>
 
-<body data-bs-theme="dark" class="my-4">
+<h1>Update Appointment #<?php echo (int)$record['id']; ?></h1>
+<p><a href="home.php">Back</a></p>
 
-    <!--Header-->
-    <header class="container bg-warning bg-gradient rounded-2 p-1">
-        <h1 class="h2 text-center text-dark">Hospital Appointment System</h1>
-    </header>
+<?php if ($update_error): ?>
+  <div class="error"><?php echo htmlspecialchars($update_error, ENT_QUOTES, 'UTF-8'); // FIX: escape ?></div>
+<?php elseif ($update_success): ?>
+  <div class="success"><?php echo htmlspecialchars($update_success, ENT_QUOTES, 'UTF-8'); // FIX: escape ?></div>
+<?php endif; ?>
 
-    <!--Appointment-->
-    <section class="container rounded-2 mt-3">
-        <div class="row">
+<form method="post" action="update.php?id=<?php echo (int)$record['id']; ?>" autocomplete="off">
+  <!-- FIX: CSRF token -->
+  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($_SESSION['csrf'], ENT_QUOTES, 'UTF-8'); ?>">
 
-            <!--Input-->
-            <form method="post" class="col col-md-6 d-flex flex-column align-items-center justify-content-center gap-3">
-                <h2 class="mt-2">Update the Appointment</h2>
-                <div class="w-100 bg-black bg-opacity-25 rounded-2 p-4">
-                    <h4>Personal Information</h4>
-                    <div class="input-group mb-2">
-                        <div class="input-group-prepend">
-                            <div class="input-group-text">Name</div>
-                        </div>
-                        <input type="text" class="form-control" id="NameInput" name="name" required value=<?php echo $name; ?> />
-                    </div>
-                    <div class="input-group mb-2">
-                        <div class="input-group-prepend">
-                            <div class="input-group-text">SurName</div>
-                        </div>
-                        <input type="text" class="form-control" id="SurnameInput" name="surname" required value=<?php echo $surname; ?> />
-                    </div>
-                    <div class="input-group mb-2">
-                        <div class="input-group-prepend">
-                            <div class="input-group-text">ID Number</div>
-                        </div>
-                        <input type="text" class="form-control" id="IdInput" name="id_number" required value=<?php echo $id_number; ?> />
-                    </div>
-                </div>
+  <div><label>Name <input name="name" required value="<?php echo htmlspecialchars($record['name'], ENT_QUOTES, 'UTF-8'); // FIX: escape ?>"></label></div>
+  <div><label>Surname <input name="surname" required value="<?php echo htmlspecialchars($record['surname'], ENT_QUOTES, 'UTF-8'); ?>"></label></div>
+  <div><label>ID Number <input name="id_number" required value="<?php echo htmlspecialchars($record['id_number'], ENT_QUOTES, 'UTF-8'); ?>"></label></div>
+  <div><label>City <input name="city" required value="<?php echo htmlspecialchars($record['city'], ENT_QUOTES, 'UTF-8'); ?>"></label></div>
+  <div><label>Department <input name="department" required value="<?php echo htmlspecialchars($record['department'], ENT_QUOTES, 'UTF-8'); ?>"></label></div>
+  <div><label>Date <input type="date" name="date" required value="<?php echo htmlspecialchars($record['date'], ENT_QUOTES, 'UTF-8'); ?>"></label></div>
 
-                <div class="w-100 bg-black bg-opacity-25 rounded-2 p-4">
-                    <h4>Appointment Information</h4>
-                    <div class="input-group mb-2">
-                        <div class="input-group-prepend">
-                            <div class="input-group-text">City</div>
-                        </div>
-                        <select class="form-control" id="CityInput" name="city" required>
-                            <option>
-                                <?php echo $city; ?>
-                            </option>
-                            <option>Antalya</option>
-                            <option>Izmir</option>
-                            <option>Tekirdag</option>
-                            <option>Istanbul</option>
-                            <option>Ankara</option>
-                        </select>
-                    </div>
-                    <div class="input-group mb-2">
-                        <div class="input-group-prepend">
-                            <div class="input-group-text">Department</div>
-                        </div>
-                        <select class="form-control" id="DepartmentInput" name="department" placeholder="Choose City"
-                            required>
-                            <option>
-                                <?php echo $department ?>
-                            </option>
-                            <option>Oral and Dental Diseases</option>
-                            <option>Eye Diesases</option>
-                            <option>Ear, Nose and Throat Diseases</option>
-                            <option>General Surgery</option>
-                            <option>Plastic Surgery</option>
-                        </select>
-                    </div>
-                    <div class="input-group mb-2">
-                        <div class="input-group-prepend">
-                            <div class="input-group-text">Date</div>
-                        </div>
-                        <input type="date" class="form-control" id="DateInput" name="date" required value=<?php echo $date; ?> />
-                    </div>
-                </div>
+  <button type="submit">Save</button>
+</form>
 
-                <!--Button-->
-                <div class="container d-flex gap-2">
-                    <button class="btn btn-outline-secondary w-100 rounded-2 text-light" type="button">
-                        <a href="./index.php" class="link">Back to the MainPage</a> </button>
-                    <button class="btn btn-success w-100 rounded-2 text-light" id="BtnSubmit" name="submit"
-                        type="submit">
-                        Update the Appointment
-                    </button>
-                </div>
-            </form>
-
-            <!--Animation-->
-            <div class="col col-md-6 d-flex align-items-center justify-content-center">
-                <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
-                <lottie-player src="https://assets7.lottiefiles.com/packages/lf20_x1gjdldd.json" mode="bounce"
-                    background="transparent" speed="0.6" style="width: fit-content; height: fit-content" loop
-                    autoplay></lottie-player>
-            </div>
-        </div>
-    </section>
-
-    <!--JS-->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../js/script.js"></script>
-    <script>
-        if (window.history.replaceState) {
-            window.history.replaceState(null, null, window.location.href);
-        }
-    </script>
 </body>
-
 </html>
